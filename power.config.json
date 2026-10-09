@@ -1,0 +1,80 @@
+{
+  "version": "1.0",
+  "appId": "0035e0c3-5c24-4fbf-9b47-7d8cc0e9ac86",
+  "appDisplayName": "PMT Plants Excellence Review",
+  "region": "prod",
+  "environmentId": "4d7fa01b-13ee-45c0-a672-10a55cfabde4",
+  "description": " ",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "pmtplants": {
+          "entitySetName": "apma_pmtplantses",
+          "logicalName": "apma_pmtplants"
+        },
+        "pmtkpidefinitions": {
+          "entitySetName": "apma_pmtkpidefinitionses",
+          "logicalName": "apma_pmtkpidefinitions"
+        },
+        "pmtmonthlykpiresults": {
+          "entitySetName": "apma_pmtmonthlykpiresultses",
+          "logicalName": "apma_pmtmonthlykpiresults"
+        },
+        "pmttarget": {
+          "entitySetName": "apma_pmttargets",
+          "logicalName": "apma_pmttarget"
+        },
+        "pmtreportcategories": {
+          "entitySetName": "apma_pmtreportcategorieses",
+          "logicalName": "apma_pmtreportcategories"
+        },
+        "pmtmonthlyreports": {
+          "entitySetName": "apma_pmtmonthlyreportses",
+          "logicalName": "apma_pmtmonthlyreports"
+        },
+        "pmtreportattachmentrecord": {
+          "entitySetName": "apma_pmtreportattachmentrecords",
+          "logicalName": "apma_pmtreportattachmentrecord"
+        },
+        "users": {
+          "entitySetName": "systemusers",
+          "logicalName": "systemuser"
+        },
+        "pmtae": {
+          "entitySetName": "apma_pmtaes",
+          "logicalName": "apma_pmtae"
+        },
+        "pmtaecategories": {
+          "entitySetName": "apma_pmtaecategorieses",
+          "logicalName": "apma_pmtaecategories"
+        },
+        "pmtproductionlinecategories": {
+          "entitySetName": "apma_pmtproductionlinecategorieses",
+          "logicalName": "apma_pmtproductionlinecategories"
+        },
+        "pmtvolume_pac": {
+          "entitySetName": "apma_pmtvolume_pacs",
+          "logicalName": "apma_pmtvolume_pac"
+        },
+        "pmtproductionlinematrix": {
+          "entitySetName": "apma_pmtproductionlinematrixes",
+          "logicalName": "apma_pmtproductionlinematrix"
+        },
+        "pmtproductionkpimatrix": {
+          "entitySetName": "apma_pmtproductionkpimatrixes",
+          "logicalName": "apma_pmtproductionkpimatrix"
+        },
+        "pmtproductionkpi": {
+          "entitySetName": "apma_pmtproductionkpis",
+          "logicalName": "apma_pmtproductionkpi"
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}
