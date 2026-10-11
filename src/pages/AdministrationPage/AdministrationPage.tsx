@@ -41,6 +41,7 @@ const styles = makeStyles({
 const lookupName = (items: Array<{ id: string; name: string }>, id: unknown) => items.find((item) => item.id === id)?.name ?? String(id ?? 'N/A');
 const lookupField = (field: string) => ({ plantName: 'plantId', kpiName: 'kpiId', productionLineName: 'productionLineId', categoryName: 'categoryId' }[field] ?? field);
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((label, index) => ({ value: String(index + 1), label }));
+type BatchMonth = number | 'all'
 
 type FilterOption = { value: string; label: string };
 type TableFilter = { key: string; label: string; recordField: string; options: FilterOption[] };
@@ -94,26 +95,151 @@ const BatchAeDialog: React.FC<{ onClose: () => void; onConfirm: (year: number, m
     return <Dialog open onOpenChange={(_event, data) => !data.open && onClose()}><DialogSurface><DialogBody><DialogTitle>Batch add AE</DialogTitle><DialogContent><div className={css.field}><Label>Year</Label><Select aria-label="Year" value={validYear ? String(year) : ''} disabled={saving || targetsQuery.isLoading} onChange={(_event, data) => setYear(Number(data.value))}><option value="">Select year</option>{years.map((option) => <option key={option} value={String(option)}>{option}</option>)}</Select></div><div className={css.field}><Label>Month</Label><Select value={month} onChange={(_event, data) => setMonth(data.value)}>{months.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div><p>Missing Plant, Production Line and AE Category combinations will be created. Existing records will not be changed.</p></DialogContent><DialogActions><Button onClick={onClose} disabled={saving}>Cancel</Button><Button appearance="primary" onClick={() => void confirm()} disabled={saving || !validYear || targetsQuery.isLoading || targetsQuery.isError}>{saving ? 'Creating...' : 'Confirm'}</Button></DialogActions></DialogBody></DialogSurface></Dialog>;
 };
 
-const BatchVolumePacDialog: React.FC<{ onClose: () => void; onConfirm: (year: number, month: number) => Promise<void> }> = ({ onClose, onConfirm }) => {
-    const css = styles();
-    const targetsQuery = useAllTargets();
-    const years = [...new Set((targetsQuery.data ?? []).map((target) => target.targetYear))].sort((left, right) => left - right);
-    const [year, setYear] = useState(new Date().getFullYear());
-    const validYear = years.includes(year);
-    const [month, setMonth] = useState(String(new Date().getMonth() + 1));
-    const [saving, setSaving] = useState(false);
-    const confirm = async () => {
-        if (!validYear) return;
-        setSaving(true);
-        try {
-            await onConfirm(year, Number(month));
-            onClose();
-        } finally {
-            setSaving(false);
+
+const BatchVolumePacDialog: React.FC<{
+  onClose: () => void
+  onConfirm: (year: number, month: BatchMonth) => Promise<void>
+}> = ({ onClose, onConfirm }) => {
+  const css = styles()
+  const targetsQuery = useAllTargets()
+
+  const years = [
+    ...new Set(
+      (targetsQuery.data ?? [])
+        .map((target) => target.targetYear)
+    ),
+  ].sort((left, right) => left - right)
+
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [month, setMonth] = useState<string>(
+    String(new Date().getMonth() + 1)
+  )
+  const [saving, setSaving] = useState(false)
+
+  const validYear = years.includes(year)
+  const selectedMonth: BatchMonth =
+    month === 'all' ? 'all' : Number(month)
+
+  const confirm = async () => {
+    if (!validYear) {
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      await onConfirm(year, selectedMonth)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(_event, data) => {
+        if (!data.open && !saving) {
+          onClose()
         }
-    };
-    return <Dialog open onOpenChange={(_event, data) => !data.open && onClose()}><DialogSurface><DialogBody><DialogTitle>Batch add Volume & PAC</DialogTitle><DialogContent><div className={css.field}><Label>Year</Label><Select aria-label="Year" value={validYear ? String(year) : ''} disabled={saving || targetsQuery.isLoading} onChange={(_event, data) => setYear(Number(data.value))}><option value="">Select year</option>{years.map((option) => <option key={option} value={String(option)}>{option}</option>)}</Select></div><div className={css.field}><Label>Month</Label><Select value={month} onChange={(_event, data) => setMonth(data.value)}>{months.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div><p>Missing Plant and Production Line combinations will be created. Existing records will not be changed.</p></DialogContent><DialogActions><Button onClick={onClose} disabled={saving}>Cancel</Button><Button appearance="primary" onClick={() => void confirm()} disabled={saving || !validYear || targetsQuery.isLoading || targetsQuery.isError}>{saving ? 'Creating...' : 'Confirm'}</Button></DialogActions></DialogBody></DialogSurface></Dialog>;
-};
+      }}
+    >
+      <DialogSurface>
+        <DialogBody>
+          <DialogTitle>Batch add Volume & PAC</DialogTitle>
+
+          <DialogContent>
+            <div className={css.field}>
+              <Label htmlFor="batch-volume-pac-year">
+                Year
+              </Label>
+
+              <Select
+                id="batch-volume-pac-year"
+                aria-label="Year"
+                value={validYear ? String(year) : ''}
+                disabled={saving || targetsQuery.isLoading}
+                onChange={(_event, data) => {
+                  setYear(Number(data.value))
+                }}
+              >
+                <option value="">Select year</option>
+
+                {years.map((option) => (
+                  <option
+                    key={option}
+                    value={String(option)}
+                  >
+                    {option}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className={css.field}>
+              <Label htmlFor="batch-volume-pac-month">
+                Month
+              </Label>
+
+              <Select
+                id="batch-volume-pac-month"
+                value={month}
+                disabled={saving}
+                onChange={(_event, data) => {
+                  setMonth(data.value)
+                }}
+              >
+                <option value="all">All</option>
+
+                {months.map((option) => (
+                  <option
+                    key={option.value}
+                    value={option.value}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              {month === 'all'
+                ? 'Missing Plant and Production Line combinations will be created for all 12 months of the selected year. Existing records will not be changed.'
+                : 'Missing Plant and Production Line combinations will be created for the selected month. Existing records will not be changed.'}
+            </div>
+          </DialogContent>
+
+          <DialogActions>
+            <Button
+              appearance="secondary"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              appearance="primary"
+              onClick={() => void confirm()}
+              disabled={
+                saving ||
+                !validYear ||
+                targetsQuery.isLoading ||
+                targetsQuery.isError
+              }
+            >
+              {saving
+                ? month === 'all'
+                  ? 'Creating full year...'
+                  : 'Creating...'
+                : 'Confirm'}
+            </Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  )
+}
 
 const BatchMonthlyReportDialog: React.FC<{ onClose: () => void; onConfirm: (year: number, month: number) => Promise<void> }> = ({ onClose, onConfirm }) => {
     const css = styles();
@@ -579,10 +705,38 @@ export const AdministrationPage: React.FC<{ mode?: 'configuration' | 'basic' }> 
         setAeEditingIds([]);
         setAeDrafts({});
     };
-    const createMissingVolumePac = async (year: number, month: number) => {
-        await chartM.createMissingVolumePac.mutateAsync({ year, month, plants, matrices: matricesQ.data ?? [], existing: volumeQ.data ?? [] });
-        setTableFilters((current) => ({ ...current, 'volumePac:year': [String(year)], 'volumePac:month': [String(month)] }));
-    };
+
+    const createMissingVolumePac = async (
+    year: number,
+    month: BatchMonth
+    ) => {
+    const selectedMonths =
+        month === 'all'
+        ? Array.from({ length: 12 }, (_value, index) => index + 1)
+        : [month]
+
+    const existingRecords = volumeQ.data ?? []
+
+    for (const selectedMonth of selectedMonths) {
+        await chartM.createMissingVolumePac.mutateAsync({
+        year,
+        month: selectedMonth,
+        plants,
+        matrices: matricesQ.data ?? [],
+        existing: existingRecords,
+        })
+    }
+
+    setTableFilters((current) => ({
+        ...current,
+        'volumePac:year': [String(year)],
+        'volumePac:month':
+        month === 'all'
+            ? []
+            : [String(month)],
+    }))
+    }
+
     const startVolumePacEditing = () => {
         setVolumePacEditingIds(sortedRows.map((item) => item.id));
         setVolumePacDrafts(Object.fromEntries(sortedRows.map((item) => {
