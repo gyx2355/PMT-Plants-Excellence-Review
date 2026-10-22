@@ -18,7 +18,7 @@ export interface ProductionKpiMatrix {
   plantId: string;
   type?: string;
   categories: string;
-  productionClass?: 'Waste' | 'FG' | 'RM' | 'Defect' | 'FPYFG' | null;
+  productionClass?: 'Waste' | 'FG' | 'RM' | 'Defect' | 'FPYFG' | 'NT' | null;
   displayOrder: number;
 }
 

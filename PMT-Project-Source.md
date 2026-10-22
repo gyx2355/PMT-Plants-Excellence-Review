@@ -1,7 +1,7 @@
 # PMT Plants Excellence Review - Project Source Snapshot
 
 > Snapshot part: 1
-> Generated: 2026-10-11 20:19:31
+> Generated: 2026-10-23 03:36:11
 > Project root: C:\Users\GAOX17\OneDrive - BASF\GX\TPU\Digital project\PMT Plants Excellence Review\PMT Plants Excellence Review
 
 ---
@@ -9,8 +9,8 @@
 # Project Overview
 
 - Project name: PMT Plants Excellence Review
-- Export date: 2026-10-11 20:19:31
-- Included source files: 102
+- Export date: 2026-10-23 03:36:11
+- Included source files: 104
 - Generated code included: False
 - Package lock included: False
 
@@ -1580,7 +1580,7 @@ Write-Status "" Gray
 ## File: power.config.json
 
 - Size: 2668 bytes
-- Last modified: 2026-10-11 20:07:01
+- Last modified: 2026-10-23 03:13:07
 
 ``json
 {
@@ -1670,8 +1670,8 @@ Write-Status "" Gray
 
 ## File: README.md
 
-- Size: 2768 bytes
-- Last modified: 2026-10-08 23:09:41
+- Size: 3346 bytes
+- Last modified: 2026-10-22 04:53:55
 
 ``markdown
 # PMT Plants Excellence Review System
@@ -1721,6 +1721,34 @@ npm run lint
 
 # Build project
 npm run build
+```
+## Code running in Local PC
+```bash
+# Frontend run
+npm run dev
+
+# Backend run
+pac code run
+```
+
+## Before start
+- Service for you apply ".NET", "Node.js"
+```bash
+# Check .NET
+dotnet --version
+# Install power platform CLI
+dotnet tool install --global Microsoft.PowerApps.CLI.Tool
+# After installation shutdown current Terminal and open new one
+pac --version
+# Enter your project path, like:
+cd PMT-Plants-Excellence-Review
+# Install npm dependencies
+npm install
+# Power Platform Login
+pac auth create
+# 更新 PAC CLI
+dotnet tool update --global Microsoft.PowerApps.CLI.Tool
+
 ```
 
 ``
@@ -3359,8 +3387,8 @@ export async function saveDataverseAttachmentToBrowser(
 
 ## File: src/data/adapters/dataverseRepositories.ts
 
-- Size: 29735 bytes
-- Last modified: 2026-10-07 21:46:41
+- Size: 30591 bytes
+- Last modified: 2026-10-11 22:53:13
 
 ``typescript
 import { KpiCategory, KpiStatus, ReportType } from '../../domain/enums';
@@ -3771,9 +3799,31 @@ export class DataverseMonthlyKpiResultRepository implements MonthlyKpiResultRepo
 
   async saveBatch(results: Array<Omit<MonthlyKpiResult, 'id'> & { id?: string }>): Promise<MonthlyKpiResult[]> {
     const saved: MonthlyKpiResult[] = [];
+    const plantNames = new Map<string, Promise<Plant>>();
+    const kpiNames = new Map<string, Promise<KpiDefinition>>();
+    const getPlant = (id: string) => {
+      let plant = plantNames.get(id);
+      if (!plant) {
+        plant = Apma_pmtplantsesService.get(id).then((response) => mapPlant(resultData(response, 'load monthly KPI result plant')));
+        plantNames.set(id, plant);
+      }
+      return plant;
+    };
+    const getKpi = (id: string) => {
+      let kpi = kpiNames.get(id);
+      if (!kpi) {
+        kpi = Apma_pmtkpidefinitionsesService.get(id).then((response) => mapKpiDefinition(resultData(response, 'load monthly KPI result KPI')));
+        kpiNames.set(id, kpi);
+      }
+      return kpi;
+    };
     for (const result of results) {
+      const [plant, kpi] = await Promise.all([
+        getPlant(result.plantId),
+        getKpi(result.kpiId),
+      ]);
       const payload: Record<string, unknown> = {
-        apma_mainname: `${result.plantId}-${result.kpiId}-${result.year}-${result.month}`,
+        apma_mainname: [result.year, result.month, plant.name, kpi.name].join('_'),
         apma_year: result.year,
         apma_month: monthToChoice(result.month),
         'apma_PlantName@odata.bind': bindLookup('apma_pmtplantses', result.plantId),
@@ -5057,8 +5107,8 @@ export type ReportType = (typeof ReportType)[keyof typeof ReportType];
 
 ## File: src/domain/models/charts.ts
 
-- Size: 1253 bytes
-- Last modified: 2026-10-07 16:53:20
+- Size: 1260 bytes
+- Last modified: 2026-10-14 22:15:25
 
 ``typescript
 export interface ProductionLine {
@@ -5081,7 +5131,7 @@ export interface ProductionKpiMatrix {
   plantId: string;
   type?: string;
   categories: string;
-  productionClass?: 'Waste' | 'FG' | 'RM' | 'Defect' | 'FPYFG' | null;
+  productionClass?: 'Waste' | 'FG' | 'RM' | 'Defect' | 'FPYFG' | 'NT' | null;
   displayOrder: number;
 }
 
@@ -5361,6 +5411,35 @@ export interface YearMonth {
 export function getPreviousPeriod(date = new Date()): YearMonth {
   const previousMonth = new Date(date.getFullYear(), date.getMonth() - 1, 1);
   return { year: previousMonth.getFullYear(), month: previousMonth.getMonth() + 1 };
+}
+
+``
+
+---
+
+## File: src/domain/services/productionFormulas.ts
+
+- Size: 997 bytes
+- Last modified: 2026-10-23 02:51:59
+
+``typescript
+export function sumFinite(values: Array<number | null | undefined>): number | null {
+  const present = values.filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));
+  return present.length === 0 ? null : present.reduce((total, value) => total + value, 0);
+}
+
+export function calculateRatioPercent(numerator: number | null, denominator: number | null): number | null {
+  if (numerator === null || denominator === null || denominator === 0) return null;
+  const ratio = numerator / denominator * 100;
+  return Number.isFinite(ratio) ? ratio : null;
+}
+
+export function calculateWasteQuantity(rm: number | null, fg: number | null, nt: number | null): number | null {
+  return rm === null && fg === null && nt === null ? null : (rm ?? 0) - (fg ?? 0) - (nt ?? 0);
+}
+
+export function calculateFpyQuantity(fg: number | null, defect: number | null): number | null {
+  return fg === null && defect === null ? null : (fg ?? 0) - (defect ?? 0);
 }
 
 ``
@@ -10016,12 +10095,13 @@ export function ProductionDataEntryPage() {
 
 ## File: src/pages/ProductionDataEntryPage/productionRows.ts
 
-- Size: 8779 bytes
-- Last modified: 2026-10-07 17:27:31
+- Size: 9582 bytes
+- Last modified: 2026-10-23 03:05:18
 
 ``typescript
 import type { Plant } from '../../domain/models';
 import type { ProductionKpiMatrix, ProductionKpiRecord } from '../../domain/models/charts';
+import { calculateFpyQuantity, calculateRatioPercent, calculateWasteQuantity, sumFinite } from '../../domain/services/productionFormulas';
 
 export interface ProductionFilters {
   years: number[];
@@ -10039,6 +10119,20 @@ const matrixKey = (plantId: string, type: string | undefined, categories: string
   JSON.stringify([normalizeId(plantId), type, categories.trim()]);
 const ratioGroupKey = (row: ProductionEntryRow) => JSON.stringify([row.year, row.month, normalizeId(row.plantId)]);
 const isRm = (category: string) => category.trim().toUpperCase() === 'RM';
+const isFg = (category: string) => category.trim().toUpperCase() === 'FG';
+const isNt = (category: string) => category.trim().toUpperCase() === 'NT';
+
+const classifyRow = (
+  row: Pick<ProductionEntryRow, 'plantId' | 'type' | 'categories'>,
+  productionClasses: Map<string, ProductionKpiMatrix['productionClass']>,
+): ProductionKpiMatrix['productionClass'] => {
+  const productionClass = productionClasses.get(matrixKey(row.plantId, row.type, row.categories));
+  if (productionClass) return productionClass;
+  if (isRm(row.categories)) return 'RM';
+  if (isFg(row.categories)) return 'FG';
+  if (isNt(row.categories)) return 'NT';
+  return null;
+};
 
 export function isCalculatedProductionQuantity(row: ProductionEntryRow, matrices: ProductionKpiMatrix[]): boolean {
   return matrices.some((matrix) => matrix.productionClass === 'FPYFG'
@@ -10058,7 +10152,7 @@ export function calculateProductionRatios(
   });
   const classQuantities = new Map<string, { fg: number | null; defect: number | null }>();
   currentRows.forEach((row) => {
-    const productionClass = productionClasses.get(matrixKey(row.plantId, row.type, row.categories));
+    const productionClass = classifyRow(row, productionClasses);
     if ((productionClass !== 'FG' && productionClass !== 'Defect') || row.quantity === null) return;
     const key = ratioGroupKey(row);
     const totals = classQuantities.get(key) ?? { fg: null, defect: null };
@@ -10067,23 +10161,21 @@ export function calculateProductionRatios(
     classQuantities.set(key, totals);
   });
   currentRows.forEach((row) => {
-    if (productionClasses.get(matrixKey(row.plantId, row.type, row.categories)) !== 'FPYFG') return;
+    if (classifyRow(row, productionClasses) !== 'FPYFG') return;
     const totals = classQuantities.get(ratioGroupKey(row));
-    row.quantity = totals && (totals.fg !== null || totals.defect !== null)
-      ? (totals.fg ?? 0) - (totals.defect ?? 0)
-      : null;
+    row.quantity = calculateFpyQuantity(totals?.fg ?? null, totals?.defect ?? null);
   });
   const rmQuantities = new Map<string, number>();
-  currentRows.filter((row) => isRm(row.categories) && row.quantity !== null).forEach((row) => {
+  currentRows.filter((row) => classifyRow(row, productionClasses) === 'RM' && row.quantity !== null).forEach((row) => {
     const key = ratioGroupKey(row);
     rmQuantities.set(key, (rmQuantities.get(key) ?? 0) + row.quantity!);
   });
   return currentRows.map((row) => {
     const denominator = rmQuantities.get(ratioGroupKey(row)) ?? null;
-    const ratio = !isRm(row.categories) && row.quantity !== null && denominator !== null && denominator !== 0
-      ? row.quantity / denominator * 100
+    const ratio = !isRm(row.categories)
+      ? calculateRatioPercent(row.quantity, denominator)
       : null;
-    return { ...row, ratio: ratio !== null && !Number.isFinite(ratio) ? null : ratio };
+    return { ...row, ratio };
   });
 }
 
@@ -10165,24 +10257,27 @@ export function calculateProductionSummary(
 ): ProductionSummary {
   const productionClass = type === 'Production' ? 'Waste' : 'FPYFG';
   const label = type === 'Production' ? 'Waste' : 'FPY';
+  const productionClasses = new Map(matrices.map((matrix) => [matrixKey(matrix.plantId, matrix.type, matrix.categories), matrix.productionClass]));
   const classifications = new Set(matrices
     .filter((matrix) => normalizeId(matrix.plantId) === normalizeId(plantId) && matrix.type === type && matrix.productionClass === productionClass)
     .map((matrix) => matrixKey(matrix.plantId, matrix.type, matrix.categories)));
   const currentRows = calculateProductionRatios(rows, drafts, matrices);
-  const relevant = currentRows.filter((row) => normalizeId(row.plantId) === normalizeId(plantId)
-    && row.type === type && classifications.has(matrixKey(row.plantId, row.type, row.categories)));
-  const rmRows = currentRows.filter((row) => normalizeId(row.plantId) === normalizeId(plantId) && isRm(row.categories));
-  const quantity = sumPresent(relevant.map((row) => row.quantity));
-  const denominator = sumPresent(rmRows.map((row) => row.quantity));
-  const ratio = quantity === null || denominator === null || denominator === 0
-    ? null
-    : quantity / denominator * 100;
-  return { label, quantity, ratio: ratio !== null && Number.isFinite(ratio) ? ratio : null };
-}
-
-function sumPresent(values: Array<number | null>): number | null {
-  const present = values.filter((value): value is number => value !== null && Number.isFinite(value));
-  return present.length === 0 ? null : present.reduce((total, value) => total + value, 0);
+  const plantRows = currentRows.filter((row) => normalizeId(row.plantId) === normalizeId(plantId));
+  const typeRows = plantRows.filter((row) => row.type === type);
+  const rmRows = plantRows.filter((row) => classifyRow(row, productionClasses) === 'RM');
+  const fgRows = typeRows.filter((row) => classifyRow(row, productionClasses) === 'FG');
+  const ntRows = typeRows.filter((row) => classifyRow(row, productionClasses) === 'NT');
+  const relevant = typeRows.filter((row) => classifications.has(matrixKey(row.plantId, row.type, row.categories)));
+  const denominator = sumFinite(rmRows.map((row) => row.quantity));
+  const quantity = type === 'Production'
+    ? calculateWasteQuantity(
+      sumFinite(rmRows.map((row) => row.quantity)),
+      sumFinite(fgRows.map((row) => row.quantity)),
+      sumFinite(ntRows.map((row) => row.quantity)),
+    )
+    : sumFinite(relevant.map((row) => row.quantity));
+  const ratio = calculateRatioPercent(quantity, denominator);
+  return { label, quantity, ratio };
 }
 
 ``
@@ -10191,11 +10286,12 @@ function sumPresent(values: Array<number | null>): number | null {
 
 ## File: src/pages/ProductionQualityPage/chartMetrics.ts
 
-- Size: 6675 bytes
-- Last modified: 2026-10-08 21:46:24
+- Size: 7792 bytes
+- Last modified: 2026-10-23 02:51:59
 
 ``typescript
 import type { ProductionKpiMatrix, ProductionKpiRecord } from '../../domain/models/charts';
+import { calculateFpyQuantity, calculateRatioPercent, calculateWasteQuantity, sumFinite } from '../../domain/services/productionFormulas';
 
 export const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -10241,14 +10337,11 @@ export function buildProductionQualityAxisDomains(points: ProductionQualityPoint
 }
 
 export function sumProductionQuantities(records: ProductionKpiRecord[]): number | null {
-  const values = records.map((record) => record.quantity).filter((value): value is number => value !== null && Number.isFinite(value));
-  return values.length === 0 ? null : values.reduce((total, value) => total + value, 0);
+  return sumFinite(records.map((record) => record.quantity));
 }
 
 export function calculatePercentage(numerator: number | null, denominator: number | null): number | null {
-  if (numerator === null || denominator === null || denominator === 0) return null;
-  const ratio = numerator / denominator * 100;
-  return Number.isFinite(ratio) ? ratio : null;
+  return calculateRatioPercent(numerator, denominator);
 }
 
 export function buildProductionQualityMetrics(
@@ -10263,6 +10356,7 @@ export function buildProductionQualityMetrics(
     .filter((matrix) => normalizeId(matrix.plantId) === normalizeId(plantId))
     .sort((left, right) => left.displayOrder - right.displayOrder || left.categories.localeCompare(right.categories));
   const rmCategories = [...new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'RM').map((matrix) => categoryKey(matrix.categories)).filter(Boolean))];
+  const ntCategories = [...new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'NT').map((matrix) => categoryKey(matrix.categories)).filter(Boolean))];
   const rmCategory = rmCategories.length === 1 ? rmCategories[0] : null;
   const typeMatrices = plantMatrices.filter((matrix) => matrix.type === type);
   const plantRecords = records.filter((record) => normalizeId(record.plantId) === normalizeId(plantId));
@@ -10270,11 +10364,13 @@ export function buildProductionQualityMetrics(
   const categoryNames = [...new Set([
     ...typeMatrices.map((matrix) => categoryKey(matrix.categories)),
     ...typeRecords.filter((record) => record.year === year || record.year === year - 1).map((record) => categoryKey(record.categories)),
-  ])].filter((category) => category && !rmCategories.includes(category));
+  ])].filter((category) => category && !rmCategories.includes(category) && !ntCategories.includes(category));
   const series = categoryNames.map((name, index) => ({ name, key: `category_${index}` }));
   const lineName = type === 'Production' ? 'Waste' : type === 'Quality' ? 'FPY' : null;
   const ratioClass = type === 'Production' ? 'Waste' : null;
   const ratioCategories = new Set(typeMatrices.filter((matrix) => matrix.productionClass === ratioClass).map((matrix) => categoryKey(matrix.categories)));
+  const rmCategoriesByType = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'RM').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
+  const ntCategoriesByType = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'NT').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
   const fgCategories = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'FG').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
   const defectCategories = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'Defect').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
   const fpyMatrixCount = typeMatrices.filter((matrix) => matrix.productionClass === 'FPYFG').length;
@@ -10292,9 +10388,18 @@ export function buildProductionQualityMetrics(
       ? fpyMatrixCount === 0 ? null : (() => {
         const fgQuantity = sumProductionQuantities(periodRecords.filter((record) => fgCategories.has(`${record.type}:${categoryKey(record.categories)}`)));
         const defectQuantity = sumProductionQuantities(periodRecords.filter((record) => defectCategories.has(`${record.type}:${categoryKey(record.categories)}`)));
-        return fgQuantity === null && defectQuantity === null ? null : ((fgQuantity ?? 0) - (defectQuantity ?? 0)) * fpyMatrixCount;
+        const fpyQuantity = calculateFpyQuantity(fgQuantity, defectQuantity);
+        return fpyQuantity === null ? null : fpyQuantity * fpyMatrixCount;
       })()
-      : sumProductionQuantities(currentTypeRecords.filter((record) => ratioCategories.has(categoryKey(record.categories))));
+      : (() => {
+        const rmQuantity = sumProductionQuantities(periodRecords.filter((record) => rmCategoriesByType.has(`${record.type}:${categoryKey(record.categories)}`)));
+        const fgQuantity = sumProductionQuantities(periodRecords.filter((record) => fgCategories.has(`${record.type}:${categoryKey(record.categories)}`)));
+        const ntQuantity = sumProductionQuantities(periodRecords.filter((record) => ntCategoriesByType.has(`${record.type}:${categoryKey(record.categories)}`)));
+        if (rmQuantity === null && fgQuantity === null && ntQuantity === null) {
+          return sumProductionQuantities(currentTypeRecords.filter((record) => ratioCategories.has(categoryKey(record.categories))));
+        }
+        return calculateWasteQuantity(rmQuantity, fgQuantity, ntQuantity);
+      })();
     return { label, quantities, percentages, ratio: lineName === null ? null : calculatePercentage(numerator, denominator) };
   };
 
@@ -10805,6 +10910,81 @@ describe('Main Name generation', () => {
 
 ---
 
+## File: src/test/monthlyKpiResultRepository.test.ts
+
+- Size: 3835 bytes
+- Last modified: 2026-10-11 22:53:13
+
+``typescript
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MonthlyKpiResult } from '../domain/models';
+
+const services = vi.hoisted(() => ({
+  results: { create: vi.fn(), update: vi.fn(), getAll: vi.fn() },
+  plants: { get: vi.fn() },
+  kpis: { get: vi.fn() },
+}));
+vi.mock('@microsoft/power-apps/data', () => ({ getClient: vi.fn(() => ({})) }));
+vi.mock('../generated/services/Apma_pmtmonthlykpiresultsesService', () => ({ Apma_pmtmonthlykpiresultsesService: services.results }));
+vi.mock('../generated/services/Apma_pmtplantsesService', () => ({ Apma_pmtplantsesService: services.plants }));
+vi.mock('../generated/services/Apma_pmtkpidefinitionsesService', () => ({ Apma_pmtkpidefinitionsesService: services.kpis }));
+import { DataverseMonthlyKpiResultRepository } from '../data/adapters/dataverseRepositories';
+
+const result: Omit<MonthlyKpiResult, 'id'> = {
+  year: 2026, month: 9, plantId: 'plant-guid', kpiId: 'kpi-guid', monthlyActual: 12.5, ytdActual: 90, status: 'Green' as MonthlyKpiResult['status'],
+};
+
+describe('Monthly KPI Results Main name generation', () => {
+  const repository = new DataverseMonthlyKpiResultRepository();
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    services.plants.get.mockResolvedValue({ success: true, data: { apma_pmtplantsid: 'plant-guid', apma_name: 'Pudong-TPU' } });
+    services.kpis.get.mockResolvedValue({ success: true, data: { apma_pmtkpidefinitionsid: 'kpi-guid', apma_kpiname: 'Production Volume' } });
+    const savedRecord = { apma_pmtmonthlykpiresultsid: 'result-id', apma_mainname: 'name', apma_year: 2026, apma_month: 457470008, _apma_plantname_value: 'plant-guid', _apma_kpiname_value: 'kpi-guid', apma_monthlyactual: 12.5, apma_ytdactual: 90 };
+    services.results.create.mockResolvedValue({ success: true, data: savedRecord });
+    services.results.update.mockResolvedValue({ success: true, data: savedRecord });
+  });
+
+  it('creates with Year_Month_Plant Name_KPI Name and binds lookups by ID', async () => {
+    await repository.saveBatch([result]);
+    expect(services.results.create).toHaveBeenCalledWith(expect.objectContaining({
+      apma_mainname: '2026_9_Pudong-TPU_Production Volume',
+      'apma_PlantName@odata.bind': '/apma_pmtplantses(plant-guid)',
+      'apma_KPIName@odata.bind': '/apma_pmtkpidefinitionses(kpi-guid)',
+    }));
+  });
+
+  it('updates the Main name using the current displayed Plant and KPI names', async () => {
+    services.plants.get.mockResolvedValue({ success: true, data: { apma_pmtplantsid: 'plant-guid', apma_name: 'Changhua-TPU' } });
+    services.kpis.get.mockResolvedValue({ success: true, data: { apma_pmtkpidefinitionsid: 'kpi-guid', apma_kpiname: 'Waste Ratio' } });
+    await repository.saveBatch([{ ...result, id: 'result-id' }]);
+    expect(services.results.update).toHaveBeenCalledWith('result-id', expect.objectContaining({
+      apma_mainname: '2026_9_Changhua-TPU_Waste Ratio',
+    }));
+  });
+
+  it('resolves each unique Plant and KPI display name only once per batch', async () => {
+    await repository.saveBatch([result, { ...result, month: 10 }]);
+    expect(services.plants.get).toHaveBeenCalledTimes(1);
+    expect(services.kpis.get).toHaveBeenCalledTimes(1);
+    expect(services.results.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      apma_mainname: '2026_10_Pudong-TPU_Production Volume',
+    }));
+  });
+
+  it('does not save when the Plant display name cannot be resolved', async () => {
+    services.plants.get.mockResolvedValue({ success: false, error: new Error('Plant lookup failed') });
+    await expect(repository.saveBatch([result])).rejects.toThrow('Plant lookup failed');
+    expect(services.results.create).not.toHaveBeenCalled();
+    expect(services.results.update).not.toHaveBeenCalled();
+  });
+});
+
+``
+
+---
+
 ## File: src/test/overviewMetrics.test.ts
 
 - Size: 3983 bytes
@@ -11066,8 +11246,8 @@ describe('Production KPI persistence', () => {
 
 ## File: src/test/productionQualityMetrics.test.ts
 
-- Size: 6162 bytes
-- Last modified: 2026-10-08 21:46:24
+- Size: 6415 bytes
+- Last modified: 2026-10-14 22:55:23
 
 ``typescript
 import { describe, expect, it } from 'vitest';
@@ -11077,8 +11257,9 @@ import { buildProductionQualityAxisDomains, buildProductionQualityMetrics } from
 const matrices: ProductionKpiMatrix[] = [
   { id: 'rm', mainName: '', plantId: 'p1', type: 'Production', categories: 'Raw material', productionClass: 'RM', displayOrder: 0 },
   { id: 'fg', mainName: '', plantId: 'p1', type: 'Production', categories: 'FG', productionClass: 'FG', displayOrder: 1 },
-  { id: 'w1', mainName: '', plantId: 'p1', type: 'Production', categories: 'Liquid', productionClass: 'Waste', displayOrder: 2 },
-  { id: 'w2', mainName: '', plantId: 'p1', type: 'Production', categories: 'Recycle', productionClass: 'Waste', displayOrder: 3 },
+  { id: 'nt', mainName: '', plantId: 'p1', type: 'Production', categories: 'NT', productionClass: 'NT', displayOrder: 2 },
+  { id: 'w1', mainName: '', plantId: 'p1', type: 'Production', categories: 'Liquid', productionClass: 'Waste', displayOrder: 3 },
+  { id: 'w2', mainName: '', plantId: 'p1', type: 'Production', categories: 'Recycle', productionClass: 'Waste', displayOrder: 4 },
   { id: 'q1', mainName: '', plantId: 'p1', type: 'Quality', categories: 'Defects', productionClass: 'Defect', displayOrder: 1 },
   { id: 'q2', mainName: '', plantId: 'p1', type: 'Quality', categories: 'FPY FG', productionClass: 'FPYFG', displayOrder: 2 },
 ];
@@ -11086,9 +11267,9 @@ const record = (categories: string, quantity: number | null, month = 1, year = 2
   id: `${plantId}-${year}-${month}-${categories}`, mainName: '', plantId, year, month, type, categories, quantity,
 });
 const records = [
-  record('Raw material', 100), record('FG', 80), record('Liquid', 5), record('Recycle', 5), record('Defects', 3, 1, 2026, 'Quality'),
-  record('Raw material', 200, 2), record('FG', 160, 2), record('Liquid', 10, 2), record('Recycle', null, 2), record('Defects', 8, 2, 2026, 'Quality'),
-  record('Raw material', 400, 12, 2025), record('FG', 300, 12, 2025), record('Liquid', 20, 12, 2025), record('Defects', 4, 12, 2025, 'Quality'),
+  record('Raw material', 100), record('FG', 80), record('NT', 8), record('Liquid', 5), record('Recycle', 5), record('Defects', 3, 1, 2026, 'Quality'),
+  record('Raw material', 200, 2), record('FG', 160, 2), record('NT', 20, 2), record('Liquid', 10, 2), record('Recycle', null, 2), record('Defects', 8, 2, 2026, 'Quality'),
+  record('Raw material', 400, 12, 2025), record('FG', 300, 12, 2025), record('NT', 12, 12, 2025), record('Liquid', 20, 12, 2025), record('Defects', 4, 12, 2025, 'Quality'),
 ];
 
 describe('Production & Quality chart metrics', () => {
@@ -11112,20 +11293,20 @@ describe('Production & Quality chart metrics', () => {
     expect(empty.ratio[1]).toBeGreaterThan(empty.ratio[0]);
   });
 
-  it('excludes RM and sums all Waste categories by month', () => {
+  it('excludes RM and NT from bars and calculates Waste ratio as RM-FG-NT over RM', () => {
     const metrics = buildProductionQualityMetrics(records, [...matrices].reverse(), '{P1}', 'Production', 2026, [1, 2]);
     expect(metrics.series.map((series) => series.name)).toEqual(['FG', 'Liquid', 'Recycle']);
-    expect(metrics.months[0].ratio).toBe(10);
+    expect(metrics.months[0].ratio).toBe(12);
     expect(metrics.months[0].percentages.category_0).toBe(80);
-    expect(metrics.months[1].ratio).toBe(5);
+    expect(metrics.months[1].ratio).toBe(10);
   });
 
   it('aggregates all prior-year months for PY but only selected CY months', () => {
     const metrics = buildProductionQualityMetrics(records, matrices, 'p1', 'Production', 2026, [1]);
     expect(metrics.comparison[0].quantities.category_0).toBe(300);
-    expect(metrics.comparison[0].ratio).toBe(5);
+    expect(metrics.comparison[0].ratio).toBe(22);
     expect(metrics.comparison[1].quantities.category_0).toBe(80);
-    expect(metrics.comparison[1].ratio).toBe(10);
+    expect(metrics.comparison[1].ratio).toBe(12);
     expect(metrics.months[1].ratio).toBeNull();
     expect(metrics.months[1].quantities.category_0).toBeNull();
     expect(metrics.months).toHaveLength(12);
@@ -11133,7 +11314,7 @@ describe('Production & Quality chart metrics', () => {
 
   it('calculates YTD as ratio of totals rather than average of monthly percentages', () => {
     const metrics = buildProductionQualityMetrics(records, matrices, 'p1', 'Production', 2026, [1, 2]);
-    expect(metrics.comparison[1].ratio).toBeCloseTo(20 / 300 * 100);
+    expect(metrics.comparison[1].ratio).toBeCloseTo(32 / 300 * 100);
   });
 
   it('uses the plant shared RM and derives Quality FPY from FG minus Defect', () => {
@@ -11146,11 +11327,11 @@ describe('Production & Quality chart metrics', () => {
 
   it('never mixes other plants, years or types in the numerator', () => {
     const input = [...records, record('Liquid', 1000, 1, 2026, 'Production', 'p2'), record('Liquid', 1000, 1, 2024), record('Liquid', 1000, 1, 2026, 'Quality')];
-    expect(buildProductionQualityMetrics(input, matrices, 'p1', 'Production', 2026, [1]).months[0].ratio).toBe(10);
+    expect(buildProductionQualityMetrics(input, matrices, 'p1', 'Production', 2026, [1]).months[0].ratio).toBe(12);
   });
 
   it('preserves zero numerator, ignores empty quantities and sums multiple records', () => {
-    const input = [record('Raw material', 50), record('Raw material', 50), record('Liquid', 0), record('Recycle', null)];
+    const input = [record('Raw material', 50), record('Raw material', 50), record('FG', 90), record('NT', 10), record('Liquid', 0), record('Recycle', null)];
     const metrics = buildProductionQualityMetrics(input, matrices, 'p1', 'Production', 2026, [1]);
     expect(metrics.months[0].ratio).toBe(0);
     expect(metrics.months[0].quantities.category_2).toBeNull();
@@ -11169,8 +11350,8 @@ describe('Production & Quality chart metrics', () => {
 
 ## File: src/test/productionRows.test.ts
 
-- Size: 10152 bytes
-- Last modified: 2026-10-07 17:27:31
+- Size: 10550 bytes
+- Last modified: 2026-10-14 22:37:27
 
 ``typescript
 import { describe, expect, it } from 'vitest';
@@ -11260,21 +11441,24 @@ describe('Production Data Entry rows', () => {
     expect(payload[0]).toMatchObject({ id: 'volume-record', quantity: 50, ratio: 50 });
   });
 
-  it('calculates Production Waste summary as total Waste over total RM', () => {
+  it('calculates Production Waste summary as (RM - FG - NT) over RM', () => {
     const classifiedMatrices: ProductionKpiMatrix[] = [
       { id: 'rm-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'RM', productionClass: 'RM', displayOrder: 0 },
-      { id: 'waste-a', mainName: '', plantId: 'p1', type: 'Production', categories: 'Waste A', productionClass: 'Waste', displayOrder: 1 },
-      { id: 'waste-b', mainName: '', plantId: 'p1', type: 'Production', categories: 'Waste B', productionClass: 'Waste', displayOrder: 2 },
+      { id: 'fg-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'FG', productionClass: 'FG', displayOrder: 1 },
+      { id: 'nt-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'NT', productionClass: 'NT', displayOrder: 2 },
+      { id: 'waste-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'Waste A', productionClass: 'Waste', displayOrder: 3 },
     ];
     const rows = [
       { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'rm-1', categories: 'RM', quantity: 100 },
       { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'rm-2', month: 10, categories: 'RM', quantity: 200 },
-      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-a', categories: 'Waste A', quantity: 10 },
-      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-b', categories: 'Waste B', quantity: 20 },
-      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-next-month', month: 10, categories: 'Waste A', quantity: 30 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'fg-1', categories: 'FG', quantity: 65 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'fg-2', month: 10, categories: 'FG', quantity: 120 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'nt-1', categories: 'NT', quantity: 5 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'nt-2', month: 10, categories: 'NT', quantity: 15 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-next-month', month: 10, categories: 'Waste A', quantity: 999 },
     ];
     const summary = calculateProductionSummary('p1', 'Production', rows, classifiedMatrices);
-    expect(summary).toEqual({ label: 'Waste', quantity: 60, ratio: 20 });
+    expect(summary).toEqual({ label: 'Waste', quantity: 95, ratio: 95 / 300 * 100 });
   });
 
   it('calculates Quality FPY from Defect quantity and shared Production RM quantity', () => {

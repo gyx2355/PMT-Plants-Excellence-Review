@@ -85,21 +85,24 @@ describe('Production Data Entry rows', () => {
     expect(payload[0]).toMatchObject({ id: 'volume-record', quantity: 50, ratio: 50 });
   });
 
-  it('calculates Production Waste summary as total Waste over total RM', () => {
+  it('calculates Production Waste summary as (RM - FG - NT) over RM', () => {
     const classifiedMatrices: ProductionKpiMatrix[] = [
       { id: 'rm-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'RM', productionClass: 'RM', displayOrder: 0 },
-      { id: 'waste-a', mainName: '', plantId: 'p1', type: 'Production', categories: 'Waste A', productionClass: 'Waste', displayOrder: 1 },
-      { id: 'waste-b', mainName: '', plantId: 'p1', type: 'Production', categories: 'Waste B', productionClass: 'Waste', displayOrder: 2 },
+      { id: 'fg-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'FG', productionClass: 'FG', displayOrder: 1 },
+      { id: 'nt-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'NT', productionClass: 'NT', displayOrder: 2 },
+      { id: 'waste-matrix', mainName: '', plantId: 'p1', type: 'Production', categories: 'Waste A', productionClass: 'Waste', displayOrder: 3 },
     ];
     const rows = [
       { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'rm-1', categories: 'RM', quantity: 100 },
       { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'rm-2', month: 10, categories: 'RM', quantity: 200 },
-      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-a', categories: 'Waste A', quantity: 10 },
-      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-b', categories: 'Waste B', quantity: 20 },
-      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-next-month', month: 10, categories: 'Waste A', quantity: 30 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'fg-1', categories: 'FG', quantity: 65 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'fg-2', month: 10, categories: 'FG', quantity: 120 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'nt-1', categories: 'NT', quantity: 5 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'nt-2', month: 10, categories: 'NT', quantity: 15 },
+      { ...buildProductionRows(plants, classifiedMatrices, [], filters)[0], key: 'waste-next-month', month: 10, categories: 'Waste A', quantity: 999 },
     ];
     const summary = calculateProductionSummary('p1', 'Production', rows, classifiedMatrices);
-    expect(summary).toEqual({ label: 'Waste', quantity: 60, ratio: 20 });
+    expect(summary).toEqual({ label: 'Waste', quantity: 95, ratio: 95 / 300 * 100 });
   });
 
   it('calculates Quality FPY from Defect quantity and shared Production RM quantity', () => {

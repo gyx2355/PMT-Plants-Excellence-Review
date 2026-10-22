@@ -1,5 +1,6 @@
 import type { Plant } from '../../domain/models';
 import type { ProductionKpiMatrix, ProductionKpiRecord } from '../../domain/models/charts';
+import { calculateFpyQuantity, calculateRatioPercent, calculateWasteQuantity, sumFinite } from '../../domain/services/productionFormulas';
 
 export interface ProductionFilters {
   years: number[];
@@ -17,6 +18,20 @@ const matrixKey = (plantId: string, type: string | undefined, categories: string
   JSON.stringify([normalizeId(plantId), type, categories.trim()]);
 const ratioGroupKey = (row: ProductionEntryRow) => JSON.stringify([row.year, row.month, normalizeId(row.plantId)]);
 const isRm = (category: string) => category.trim().toUpperCase() === 'RM';
+const isFg = (category: string) => category.trim().toUpperCase() === 'FG';
+const isNt = (category: string) => category.trim().toUpperCase() === 'NT';
+
+const classifyRow = (
+  row: Pick<ProductionEntryRow, 'plantId' | 'type' | 'categories'>,
+  productionClasses: Map<string, ProductionKpiMatrix['productionClass']>,
+): ProductionKpiMatrix['productionClass'] => {
+  const productionClass = productionClasses.get(matrixKey(row.plantId, row.type, row.categories));
+  if (productionClass) return productionClass;
+  if (isRm(row.categories)) return 'RM';
+  if (isFg(row.categories)) return 'FG';
+  if (isNt(row.categories)) return 'NT';
+  return null;
+};
 
 export function isCalculatedProductionQuantity(row: ProductionEntryRow, matrices: ProductionKpiMatrix[]): boolean {
   return matrices.some((matrix) => matrix.productionClass === 'FPYFG'
@@ -36,7 +51,7 @@ export function calculateProductionRatios(
   });
   const classQuantities = new Map<string, { fg: number | null; defect: number | null }>();
   currentRows.forEach((row) => {
-    const productionClass = productionClasses.get(matrixKey(row.plantId, row.type, row.categories));
+    const productionClass = classifyRow(row, productionClasses);
     if ((productionClass !== 'FG' && productionClass !== 'Defect') || row.quantity === null) return;
     const key = ratioGroupKey(row);
     const totals = classQuantities.get(key) ?? { fg: null, defect: null };
@@ -45,23 +60,21 @@ export function calculateProductionRatios(
     classQuantities.set(key, totals);
   });
   currentRows.forEach((row) => {
-    if (productionClasses.get(matrixKey(row.plantId, row.type, row.categories)) !== 'FPYFG') return;
+    if (classifyRow(row, productionClasses) !== 'FPYFG') return;
     const totals = classQuantities.get(ratioGroupKey(row));
-    row.quantity = totals && (totals.fg !== null || totals.defect !== null)
-      ? (totals.fg ?? 0) - (totals.defect ?? 0)
-      : null;
+    row.quantity = calculateFpyQuantity(totals?.fg ?? null, totals?.defect ?? null);
   });
   const rmQuantities = new Map<string, number>();
-  currentRows.filter((row) => isRm(row.categories) && row.quantity !== null).forEach((row) => {
+  currentRows.filter((row) => classifyRow(row, productionClasses) === 'RM' && row.quantity !== null).forEach((row) => {
     const key = ratioGroupKey(row);
     rmQuantities.set(key, (rmQuantities.get(key) ?? 0) + row.quantity!);
   });
   return currentRows.map((row) => {
     const denominator = rmQuantities.get(ratioGroupKey(row)) ?? null;
-    const ratio = !isRm(row.categories) && row.quantity !== null && denominator !== null && denominator !== 0
-      ? row.quantity / denominator * 100
+    const ratio = !isRm(row.categories)
+      ? calculateRatioPercent(row.quantity, denominator)
       : null;
-    return { ...row, ratio: ratio !== null && !Number.isFinite(ratio) ? null : ratio };
+    return { ...row, ratio };
   });
 }
 
@@ -143,22 +156,25 @@ export function calculateProductionSummary(
 ): ProductionSummary {
   const productionClass = type === 'Production' ? 'Waste' : 'FPYFG';
   const label = type === 'Production' ? 'Waste' : 'FPY';
+  const productionClasses = new Map(matrices.map((matrix) => [matrixKey(matrix.plantId, matrix.type, matrix.categories), matrix.productionClass]));
   const classifications = new Set(matrices
     .filter((matrix) => normalizeId(matrix.plantId) === normalizeId(plantId) && matrix.type === type && matrix.productionClass === productionClass)
     .map((matrix) => matrixKey(matrix.plantId, matrix.type, matrix.categories)));
   const currentRows = calculateProductionRatios(rows, drafts, matrices);
-  const relevant = currentRows.filter((row) => normalizeId(row.plantId) === normalizeId(plantId)
-    && row.type === type && classifications.has(matrixKey(row.plantId, row.type, row.categories)));
-  const rmRows = currentRows.filter((row) => normalizeId(row.plantId) === normalizeId(plantId) && isRm(row.categories));
-  const quantity = sumPresent(relevant.map((row) => row.quantity));
-  const denominator = sumPresent(rmRows.map((row) => row.quantity));
-  const ratio = quantity === null || denominator === null || denominator === 0
-    ? null
-    : quantity / denominator * 100;
-  return { label, quantity, ratio: ratio !== null && Number.isFinite(ratio) ? ratio : null };
-}
-
-function sumPresent(values: Array<number | null>): number | null {
-  const present = values.filter((value): value is number => value !== null && Number.isFinite(value));
-  return present.length === 0 ? null : present.reduce((total, value) => total + value, 0);
+  const plantRows = currentRows.filter((row) => normalizeId(row.plantId) === normalizeId(plantId));
+  const typeRows = plantRows.filter((row) => row.type === type);
+  const rmRows = plantRows.filter((row) => classifyRow(row, productionClasses) === 'RM');
+  const fgRows = typeRows.filter((row) => classifyRow(row, productionClasses) === 'FG');
+  const ntRows = typeRows.filter((row) => classifyRow(row, productionClasses) === 'NT');
+  const relevant = typeRows.filter((row) => classifications.has(matrixKey(row.plantId, row.type, row.categories)));
+  const denominator = sumFinite(rmRows.map((row) => row.quantity));
+  const quantity = type === 'Production'
+    ? calculateWasteQuantity(
+      sumFinite(rmRows.map((row) => row.quantity)),
+      sumFinite(fgRows.map((row) => row.quantity)),
+      sumFinite(ntRows.map((row) => row.quantity)),
+    )
+    : sumFinite(relevant.map((row) => row.quantity));
+  const ratio = calculateRatioPercent(quantity, denominator);
+  return { label, quantity, ratio };
 }

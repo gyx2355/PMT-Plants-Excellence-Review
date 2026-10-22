@@ -4,6 +4,7 @@
  */
 export const Apma_pmtproductionkpimatrixesapma_productionclass = {
   457470000: 'Waste',
+  457470005: 'NT',
   457470001: 'FG',
   457470002: 'RM',
   457470003: 'Defect',
@@ -15,6 +16,11 @@ export const Apma_pmtproductionkpimatrixesapma_type = {
   457470001: 'Quality'
 } as const;
 export type Apma_pmtproductionkpimatrixesapma_type = keyof typeof Apma_pmtproductionkpimatrixesapma_type;
+export const Apma_pmtproductionkpimatrixesstatecode = {
+  0: 'Active',
+  1: 'Inactive'
+} as const;
+export type Apma_pmtproductionkpimatrixesstatecode = keyof typeof Apma_pmtproductionkpimatrixesstatecode;
 
 export interface Apma_pmtproductionkpimatrixesBase {
   apma_categories?: string;
@@ -29,7 +35,7 @@ export interface Apma_pmtproductionkpimatrixesBase {
   ownerid: string;
   owneridtype: string;
   "OwningBusinessUnit@odata.bind"?: string;
-  statecode: string;
+  statecode: Apma_pmtproductionkpimatrixesstatecode;
   statuscode?: string;
   timezoneruleversionnumber?: number;
   utcconversiontimezonecode?: number;

@@ -46,3 +46,31 @@ npm run lint
 # Build project
 npm run build
 ```
+## Code running in Local PC
+```bash
+# Frontend run
+npm run dev
+
+# Backend run
+pac code run
+```
+
+## Before start
+- Service for you apply ".NET", "Node.js"
+```bash
+# Check .NET
+dotnet --version
+# Install power platform CLI
+dotnet tool install --global Microsoft.PowerApps.CLI.Tool
+# After installation shutdown current Terminal and open new one
+pac --version
+# Enter your project path, like:
+cd PMT-Plants-Excellence-Review
+# Install npm dependencies
+npm install
+# Power Platform Login
+pac auth create
+# 更新 PAC CLI
+dotnet tool update --global Microsoft.PowerApps.CLI.Tool
+
+```

@@ -406,9 +406,31 @@ export class DataverseMonthlyKpiResultRepository implements MonthlyKpiResultRepo
 
   async saveBatch(results: Array<Omit<MonthlyKpiResult, 'id'> & { id?: string }>): Promise<MonthlyKpiResult[]> {
     const saved: MonthlyKpiResult[] = [];
+    const plantNames = new Map<string, Promise<Plant>>();
+    const kpiNames = new Map<string, Promise<KpiDefinition>>();
+    const getPlant = (id: string) => {
+      let plant = plantNames.get(id);
+      if (!plant) {
+        plant = Apma_pmtplantsesService.get(id).then((response) => mapPlant(resultData(response, 'load monthly KPI result plant')));
+        plantNames.set(id, plant);
+      }
+      return plant;
+    };
+    const getKpi = (id: string) => {
+      let kpi = kpiNames.get(id);
+      if (!kpi) {
+        kpi = Apma_pmtkpidefinitionsesService.get(id).then((response) => mapKpiDefinition(resultData(response, 'load monthly KPI result KPI')));
+        kpiNames.set(id, kpi);
+      }
+      return kpi;
+    };
     for (const result of results) {
+      const [plant, kpi] = await Promise.all([
+        getPlant(result.plantId),
+        getKpi(result.kpiId),
+      ]);
       const payload: Record<string, unknown> = {
-        apma_mainname: `${result.plantId}-${result.kpiId}-${result.year}-${result.month}`,
+        apma_mainname: [result.year, result.month, plant.name, kpi.name].join('_'),
         apma_year: result.year,
         apma_month: monthToChoice(result.month),
         'apma_PlantName@odata.bind': bindLookup('apma_pmtplantses', result.plantId),

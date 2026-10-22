@@ -1,4 +1,5 @@
 import type { ProductionKpiMatrix, ProductionKpiRecord } from '../../domain/models/charts';
+import { calculateFpyQuantity, calculateRatioPercent, calculateWasteQuantity, sumFinite } from '../../domain/services/productionFormulas';
 
 export const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -44,14 +45,11 @@ export function buildProductionQualityAxisDomains(points: ProductionQualityPoint
 }
 
 export function sumProductionQuantities(records: ProductionKpiRecord[]): number | null {
-  const values = records.map((record) => record.quantity).filter((value): value is number => value !== null && Number.isFinite(value));
-  return values.length === 0 ? null : values.reduce((total, value) => total + value, 0);
+  return sumFinite(records.map((record) => record.quantity));
 }
 
 export function calculatePercentage(numerator: number | null, denominator: number | null): number | null {
-  if (numerator === null || denominator === null || denominator === 0) return null;
-  const ratio = numerator / denominator * 100;
-  return Number.isFinite(ratio) ? ratio : null;
+  return calculateRatioPercent(numerator, denominator);
 }
 
 export function buildProductionQualityMetrics(
@@ -66,6 +64,7 @@ export function buildProductionQualityMetrics(
     .filter((matrix) => normalizeId(matrix.plantId) === normalizeId(plantId))
     .sort((left, right) => left.displayOrder - right.displayOrder || left.categories.localeCompare(right.categories));
   const rmCategories = [...new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'RM').map((matrix) => categoryKey(matrix.categories)).filter(Boolean))];
+  const ntCategories = [...new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'NT').map((matrix) => categoryKey(matrix.categories)).filter(Boolean))];
   const rmCategory = rmCategories.length === 1 ? rmCategories[0] : null;
   const typeMatrices = plantMatrices.filter((matrix) => matrix.type === type);
   const plantRecords = records.filter((record) => normalizeId(record.plantId) === normalizeId(plantId));
@@ -73,11 +72,13 @@ export function buildProductionQualityMetrics(
   const categoryNames = [...new Set([
     ...typeMatrices.map((matrix) => categoryKey(matrix.categories)),
     ...typeRecords.filter((record) => record.year === year || record.year === year - 1).map((record) => categoryKey(record.categories)),
-  ])].filter((category) => category && !rmCategories.includes(category));
+  ])].filter((category) => category && !rmCategories.includes(category) && !ntCategories.includes(category));
   const series = categoryNames.map((name, index) => ({ name, key: `category_${index}` }));
   const lineName = type === 'Production' ? 'Waste' : type === 'Quality' ? 'FPY' : null;
   const ratioClass = type === 'Production' ? 'Waste' : null;
   const ratioCategories = new Set(typeMatrices.filter((matrix) => matrix.productionClass === ratioClass).map((matrix) => categoryKey(matrix.categories)));
+  const rmCategoriesByType = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'RM').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
+  const ntCategoriesByType = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'NT').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
   const fgCategories = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'FG').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
   const defectCategories = new Set(plantMatrices.filter((matrix) => matrix.productionClass === 'Defect').map((matrix) => `${matrix.type}:${categoryKey(matrix.categories)}`));
   const fpyMatrixCount = typeMatrices.filter((matrix) => matrix.productionClass === 'FPYFG').length;
@@ -95,9 +96,18 @@ export function buildProductionQualityMetrics(
       ? fpyMatrixCount === 0 ? null : (() => {
         const fgQuantity = sumProductionQuantities(periodRecords.filter((record) => fgCategories.has(`${record.type}:${categoryKey(record.categories)}`)));
         const defectQuantity = sumProductionQuantities(periodRecords.filter((record) => defectCategories.has(`${record.type}:${categoryKey(record.categories)}`)));
-        return fgQuantity === null && defectQuantity === null ? null : ((fgQuantity ?? 0) - (defectQuantity ?? 0)) * fpyMatrixCount;
+        const fpyQuantity = calculateFpyQuantity(fgQuantity, defectQuantity);
+        return fpyQuantity === null ? null : fpyQuantity * fpyMatrixCount;
       })()
-      : sumProductionQuantities(currentTypeRecords.filter((record) => ratioCategories.has(categoryKey(record.categories))));
+      : (() => {
+        const rmQuantity = sumProductionQuantities(periodRecords.filter((record) => rmCategoriesByType.has(`${record.type}:${categoryKey(record.categories)}`)));
+        const fgQuantity = sumProductionQuantities(periodRecords.filter((record) => fgCategories.has(`${record.type}:${categoryKey(record.categories)}`)));
+        const ntQuantity = sumProductionQuantities(periodRecords.filter((record) => ntCategoriesByType.has(`${record.type}:${categoryKey(record.categories)}`)));
+        if (rmQuantity === null && fgQuantity === null && ntQuantity === null) {
+          return sumProductionQuantities(currentTypeRecords.filter((record) => ratioCategories.has(categoryKey(record.categories))));
+        }
+        return calculateWasteQuantity(rmQuantity, fgQuantity, ntQuantity);
+      })();
     return { label, quantities, percentages, ratio: lineName === null ? null : calculatePercentage(numerator, denominator) };
   };
 
